@@ -104,6 +104,9 @@
 #define COLOR_YELLOW		0xE
 #define COLOR_WHITE			0xF
 
+#define EGA_TEXT_MODE		0x03
+#define EGA_GRAPHICS_MODE	0x0D
+
 unsigned char far * FRAME_BUFFER = (unsigned char far *)0x00000000;
 
 int SCREEN_RES_X = 0;
@@ -320,11 +323,144 @@ void set_pixel(int x, int y, unsigned char color)
 	*(FRAME_BUFFER + (x>>3) + y*(SCREEN_RES_X>>3)) &= 0;
 }
 
+void draw_line(int x1, int x2, int y, unsigned char color)
+{
+	//Receives the X and Y coordinates of the start and finish of the horizontal line and its color, 
+	//and draws it on the screen.
+
+	unsigned char l_bitmask;
+	unsigned char r_bitmask;
+	unsigned char m_bitmask;
+	
+	int middle_start;
+	int middle_end;
+
+	int i;
+	
+	//Isnt really nescessary, but just in case SOMEONE sends an inverted line to this.
+	if(x2 < x1)
+	{
+		int temp;
+
+		temp = x2;
+		x2 = x1;
+		x1 = temp;
+	}
+
+	//Figuring out the bitmask of the edges of the line, since they arent nescessarily aligned to a byte
+	//I couldve done everything aligned to the nibble and it probably would be slightly faster, but feck it
+
+	l_bitmask = 0xFF >> (x1&7);
+	r_bitmask = (0xFF << (7-(x2&7))) & 0xFF;
+
+
+	//Read the set_pixel comments
+	_asm 	{
+				mov dx, GFX_ADDRESS_REGISTER
+				mov al, GFX_SET_RESET_INDEX
+				mov ah, color
+				out dx, ax
+				mov al, GFX_ENABLE_SET_RESET_INDEX
+				mov ah, 0x0F
+				out dx, ax
+			}
+
+	//In case the X2 and X1 positions are inside the same byte. 
+	if(x1>>3 == x2>>3)
+	{
+		//This is basically the bitmask of the entire line
+		m_bitmask = (unsigned char)(l_bitmask & r_bitmask);
+
+		_asm	{
+					mov dx, GFX_ADDRESS_REGISTER
+					mov al, GFX_BIT_MASK_INDEX
+					mov ah, m_bitmask
+					out dx, ax
+				}
+
+		*(FRAME_BUFFER + (x1>>3) + y*(SCREEN_RES_X>>3)) &= 0;
+	}	
+	else
+	{
+		//Figuring out the positions of the start and finish of the middle block
+		middle_start = x1 + 8 - (x1&7);
+		middle_end = x2 - (x2&7); 
+
+		//Drawing the left edge.
+		_asm	{
+					mov dx, GFX_ADDRESS_REGISTER
+					mov al, GFX_BIT_MASK_INDEX
+					mov ah, l_bitmask
+					out dx, ax
+				}
+
+		*(FRAME_BUFFER + (x1>>3) + y*(SCREEN_RES_X>>3)) &= 0;
+
+		//Figuring out if there is a middle section.
+		if(middle_end - middle_start > 0)
+		{
+			//Setting registers for fast draw of the middle section
+			_asm	{
+						mov dx, GFX_ADDRESS_REGISTER
+						mov al, GFX_BIT_MASK_INDEX
+						mov ah, 0xFF
+						out dx, ax
+					}	
+
+			//I think I can use a memmory fill here, but I'm not sure, I think i need to do a read,
+			//for the latches to work, dunno, will try later.
+
+			for (i = 0; i < ((middle_end - middle_start)>>3); i++)
+			{
+				*(FRAME_BUFFER + ((middle_start>>3)+i) + y*(SCREEN_RES_X>>3)) &= 0;
+			}
+		}
+
+		//Drawing right edge
+		_asm	{
+					mov dx, GFX_ADDRESS_REGISTER
+					mov al, GFX_BIT_MASK_INDEX
+					mov ah, r_bitmask
+					out dx, ax
+				}	
+
+		*(FRAME_BUFFER + (x2>>3) + y*(SCREEN_RES_X>>3)) &= 0;
+	}
+}
+
+void fill_screen(unsigned char color)
+{
+	int screen_size;
+
+	screen_size = (SCREEN_RES_X/16)*SCREEN_RES_Y;
+
+	//Sets up the registers and makes write operations to the memmory 2 bytes at a time
+	_asm 	{
+			mov dx, GFX_ADDRESS_REGISTER
+			mov al, GFX_SET_RESET_INDEX
+			mov ah, color
+			out dx, ax
+			mov al, GFX_ENABLE_SET_RESET_INDEX
+			mov ah, 0x0F
+			out dx, ax
+			mov al, GFX_BIT_MASK_INDEX
+			mov ah, 0xFF
+			out dx, ax
+			les di, FRAME_BUFFER
+			mov al, 0x00
+			mov ah, al
+			mov cx, screen_size
+			rep stosw
+		}
+}
+
 int main()
 {
-	int i = 0;
-	int j = 0;
+	set_ega_mode(EGA_GRAPHICS_MODE);
 
+	fill_screen(COLOR_YELLOW);
+	draw_line(2, 20, 3, COLOR_GREEN);
+	getch();
 
 	return 0;
 }
