@@ -6,6 +6,7 @@ The main idea is to make this as efficient as possible, really making it possibl
 
 Hopefully I can channel my inner Abrash and make is as such.
 
+As always, going to do the compiling with my copy of Turbo C 3.0, it has not failed me yet, when it does, i'll look at other options.
 
 Wish me luck
 
