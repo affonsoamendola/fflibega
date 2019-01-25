@@ -21,6 +21,3 @@ run:
 
 clean:
 	$(RM) *.OBJ *.EXE *.LOG *.BAT
-
-cleanall:
-	$(RM) *.OBJ *.EXE *.LOG *.BAT
