@@ -9,7 +9,7 @@ RM = rm -f
 
 INCLUDE = include;D:\tc\include
 LIB = D:\tc\lib
-CCFLAGS =
+CCFLAGS = -c
 
 all: $(GAMENAME).exe
 

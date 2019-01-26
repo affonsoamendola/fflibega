@@ -1,6 +1,9 @@
 //Copyright Affonso Amendola 2019
 //Distributed under GPLv3, check the LICENSE file for some great licensing.
 //
+//libEGA
+//---------------------------------------------
+//
 //So, I decided to write an EGA library, just for fun yknow, had nothing to do in my weekend,
 //and the logical conclusion was "ALRIGHT, LETS CODE A FECKING EGA GRAPHICS LIBRARY, HELL YEAH", and so, 
 //this is what I wrote,
@@ -19,100 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MISCELLANEOUS_OUTPUT_REGISTER			0x3C2
-#define FEATURE_CONTROL_REGISTER 				0x3DA
-#define FEATURE_CONTROL_REGISTER_MONO			0x3BA
-#define INPUT_STATUS_REGISTER_0					0x3C2
-#define	INPUT_STATUS_REGISTER_1					0x3D2
-#define INPUT_STATUS_REGISTER_1_MONO			0x3B2
-
-#define SEQUENCER_ADDRESS_REGISTER				0x3C4
-#define SEQUENCER_DATA_REGISTER					0x3C5
-
-#define SEQUENCER_RESET_INDEX					0x00
-#define SEQUENCER_CLOCKING_MODE_INDEX			0x01
-#define SEQUENCER_MAP_MASK_INDEX				0x02
-#define SEQUENCER_CHARACTER_MAP_SELECT_INDEX	0x03
-#define SEQUENCER_MEMORY_MODE_INDEX				0x04
-
-#define CRTC_ADDRESS_REGISTER					0x3D4
-#define CRTC_DATA_REGISTER						0x3D5
-#define CRTC_ADDRESS_REGISTER_MONO				0x3B4
-#define CRTC_DATA_REGISTER_MONO					0x3B5
-
-#define CRTC_H_TOTAL_INDEX						0x00
-#define CRTC_H_DISPLAY_END_INDEX				0x01
-#define CRTC_START_H_BLANK_INDEX				0x02
-#define CRTC_END_H_BLANK_INDEX					0x03
-#define CRTC_START_H_RETRACE_INDEX				0x04
-#define CRTC_END_H_RETRACE_INDEX				0x05
-#define CRTC_V_TOTAL_INDEX						0x06
-#define CRTC_OVERFLOW_INDEX						0x07
-#define CRTC_PRESET_ROW_SCAN_INDEX				0x08
-#define CRTC_MAX_SCAN_LINE_INDEX				0x09
-#define CRTC_CURSOR_START_INDEX					0x0A
-#define CRTC_CURSOR_END_INDEX					0x0B
-#define CRTC_START_ADDRESS_HIGH_INDEX			0x0C
-#define CRTC_START_ADDRESS_LOW_INDEX			0x0D
-#define CRTC_CURSOR_LOCATION_HIGH_INDEX			0x0E
-#define CRTC_CURSOR_LOCATION_LOW_INDEX			0x0F
-#define CRTC_START_V_RETRACE_INDEX				0x10
-#define CRTC_END_V_RETRACE_INDEX				0x11
-#define CRTC_LIGHT_PEN_HIGH_INDEX				0x10
-#define CRTC_LIGHT_PEN_LOW_INDEX				0x11
-#define CRTC_V_DISPLAY_END_INDEX				0x12
-#define CRTC_OFFSET_INDEX						0x13
-#define CRTC_UNDERLINE_LOCATION_INDEX			0x14
-#define CRTC_START_V_BLANK_INDEX				0x15
-#define CRTC_END_V_BLANK_INDEX					0x16
-#define CRTC_MODE_CONTROL_INDEX					0x17
-#define CRTC_LINE_COMPARE_INDEX					0x18
-
-#define GFX_1_POSITION_REGISTER					0x3CC
-#define GFX_2_POSITION_REGISTER					0x3CA
-#define GFX_ADDRESS_REGISTER					0x3CE
-#define GFX_DATA_REGISTER						0x3CF
-
-#define GFX_SET_RESET_INDEX						0x00
-#define GFX_ENABLE_SET_RESET_INDEX				0x01
-#define GFX_COLOR_COMPARE_INDEX					0x02
-#define GFX_DATA_ROTATE_INDEX					0x03
-#define GFX_READ_MAP_SELECT_INDEX				0x04
-#define GFX_MODE_REGISTER_INDEX					0x05
-#define GFX_MISC_INDEX							0x06
-#define GFX_COLOR_DONT_CARE_INDEX				0x07
-#define GFX_BIT_MASK_INDEX						0x08	
-
-#define ATTR_CONTROLLER_ADDRESS_REGISTER 		0x3C0
-#define ATTR_CONTROLLER_DATA_REGISTER 			0x3C0
-
-#define	ATTR_CONTROLLER_PALLETE_INDEX			0x00 	//	Actually, the pallete registers goes from 
-														//	index 0x00 to 0x0F, keep that in mind
-
-#define ATTR_CONTROLLER_MODE_CONTROL_INDEX				0x10
-#define ATTR_CONTROLLER_OVERSCAN_COLOR_INDEX			0x11
-#define ATTR_CONTROLLER_COLOR_PLANE_ENABLE_INDEX		0x12
-#define ATTR_CONTROLLER_H_PIXEL_PANNING_REGISTER_INDEX	0x13
-
-#define COLOR_BLACK			0x0
-#define COLOR_BLUE			0x1
-#define COLOR_GREEN			0x2
-#define COLOR_CYAN			0x3
-#define COLOR_RED 			0x4
-#define COLOR_MAGENTA		0x5
-#define COLOR_BROWN			0x6
-#define COLOR_LIGHT_GRAY	0x7
-#define COLOR_GRAY 			0x8
-#define COLOR_LIGHT_BLUE	0x9
-#define COLOR_LIGHT_GREEN	0xA
-#define COLOR_LIGHT_CYAN	0xB
-#define COLOR_LIGHT_RED		0xC
-#define COLOR_LIGHT_MAGENTA	0xD
-#define COLOR_YELLOW		0xE
-#define COLOR_WHITE			0xF
-
-#define EGA_TEXT_MODE		0x03
-#define EGA_GRAPHICS_MODE	0x0D
+#include "libega.h"
 
 int CURRENT_PAGE = 0;
 
@@ -151,6 +61,7 @@ int FILE_POSITION = 0;
 
 void set_write_image_size(int value)
 {
+
 	WRITE_IMAGE_SIZE = value;
 }
 
@@ -1131,14 +1042,12 @@ void transfer_tile_to_display(	unsigned char far * origin,
 	char current_pixel;
 
 	int image_x;
-	int image_y;
 
 	int i, j = 0;
 
 	current_pixel = 0;
 
 	image_x = *((int *)origin);
-	image_y = *((int *)origin+2);
 	
 	_asm 	{
 				//Sets the sequencer to 0x0F, so that every bit plane is being written to.
@@ -1283,21 +1192,4 @@ void draw_string(int x, int y, char color, char * string)
 	{
 		draw_char(x + (i<<3), y, color, string[i]);
 	}
-}
-
-int main()
-{
-	set_ega_mode(EGA_GRAPHICS_MODE);
-	DOUBLE_BUFFER_ENABLED = 0;
-
-	load_pgm("tileset.pgm", IMAGE_STORAGE);
-	transfer_tile_to_display(	IMAGE_STORAGE,
-							 	8, 8, 
-								16, 16, 
-								16, 16);
-
-	page_flip();
-
-	getch();
-	return 0;
 }
