@@ -1,7 +1,7 @@
 //Copyright Affonso Amendola 2019
 //Distributed under GPLv3, check the LICENSE file for some great licensing.
 //
-//So, I decided to write an EGA library, just for fun yknow, had nothing to do with my weekend,
+//So, I decided to write an EGA library, just for fun yknow, had nothing to do in my weekend,
 //and the logical conclusion was "ALRIGHT, LETS CODE A FECKING EGA GRAPHICS LIBRARY, HELL YEAH", and so, 
 //this is what I wrote,
 //
@@ -9,6 +9,7 @@
 //
 //Hopefully.
 //
+//EDIT: Took a bit longer than a weekend, BUT IT FECKING WORKS!
 
 #include <time.h>
 
@@ -113,8 +114,6 @@
 #define EGA_TEXT_MODE		0x03
 #define EGA_GRAPHICS_MODE	0x0D
 
-#define CHAR_SET_ROM		0xF000FA6E
-
 int CURRENT_PAGE = 0;
 
 int PAGE_0_OFFSET = 0x0000;
@@ -124,6 +123,8 @@ unsigned char far * PAGE_0_ADDRESS = 0x00000000;
 unsigned char far * PAGE_1_ADDRESS = 0x00000000;
 
 unsigned char far * IMAGE_STORAGE = 0x00000000;
+
+unsigned char far * CHAR_SET = 0x00000000;
 
 int SCREEN_RES_X = 0;
 int SCREEN_RES_Y = 0;
@@ -803,7 +804,7 @@ int fgeti(FILE * file, char separator)
 
 void load_font(char * file_location, unsigned char far * address)
 {
-		//Receives a DOS file location and loads it in the specified memory location
+	//Receives a DOS file location and loads it in the specified memory location
 
 	FILE * file;
 
@@ -812,14 +813,12 @@ void load_font(char * file_location, unsigned char far * address)
 	int size_x = 0;
 	int size_y = 0;
 
-	int x, y = 0;
-	char c = 0;
+	int x, y, xc;
+	char p;
 
 	char bitmask = 0;
 
 	char current_pixel = 0;
-
-	int data_offset = 0;
 
 	file = fopen(file_location, "r");
 
@@ -874,16 +873,60 @@ void load_font(char * file_location, unsigned char far * address)
 
 	fgeti(file, '\n');
 
-	for(p = 0; p < 4; p++)
+	_asm 	{
+			mov dx, GFX_ADDRESS_REGISTER
+			mov al, GFX_SET_RESET_INDEX
+			mov ah, 0x0F
+			out dx, ax
+			mov al, GFX_ENABLE_SET_RESET_INDEX
+			mov ah, 0x0F
+			out dx, ax
+			}
+
+	for(p = 1; p <= 8; p*=2)
 	{
+		_asm 	{
+				mov dx, SEQUENCER_ADDRESS_REGISTER
+				mov al, SEQUENCER_MAP_MASK_INDEX
+				mov ah, p
+				out dx, ax
+				}
+
 		for(y = 0; y < 8; y++)
 		{
-			for(x = 0; x < (192>>3); x++)
-			{
-				
+			for(x = 0; x < (size_x>>3); x++)
+			{	
+				bitmask = 0x00;
+				for(xc = 0; xc < 8; xc++)
+				{
+					current_pixel = 0x00;
+					if(fgeti(file, '\n') > 100)
+					{
+						current_pixel = 0x80>>xc;
+					}
+					bitmask |= current_pixel;
+				}
+
+				_asm 	{
+						mov dx, GFX_ADDRESS_REGISTER
+						mov al, GFX_BIT_MASK_INDEX
+						mov ah, bitmask
+						out dx, ax
+						}
+
+				*(address + x + y*(size_x>>3)) &= 0x0;
 			}
 		}
 	}
+
+	_asm 	{
+				mov dx, SEQUENCER_ADDRESS_REGISTER
+				mov al, SEQUENCER_MAP_MASK_INDEX
+				mov ah, 0x0F
+				out dx, ax
+				}
+
+	CHAR_SET = address;
 }
 
 void load_pgm(char * file_location, unsigned char far * address)
@@ -1076,73 +1119,182 @@ void transfer_mem_to_display(unsigned char far * origin, int x, int y)
 			}
 }
 
-void draw_char(int xc, int yc, char c, char color, int transparency)
+void transfer_tile_to_display(	unsigned char far * origin,
+							 	int x, int y, 
+								int tile_x, int tile_y, 
+								int tile_size_x, int tile_size_y)
+{	
+	//Receives a pointer to an image loaded in memory with load_pgm and a position on screen, and
+	//copies it (very quickly!), to that position on screen, taking into consideration the x and y
+	//size of the image, so it appears correctly.
+
+	char current_pixel;
+
+	int image_x;
+	int image_y;
+
+	int i, j = 0;
+
+	current_pixel = 0;
+
+	image_x = *((int *)origin);
+	image_y = *((int *)origin+2);
+	
+	_asm 	{
+				//Sets the sequencer to 0x0F, so that every bit plane is being written to.
+				mov dx, SEQUENCER_ADDRESS_REGISTER
+				mov al, SEQUENCER_MAP_MASK_INDEX
+				mov ah, 0x0F
+				out dx, ax
+				//Changes to mode 1, so that the transfer can happen 32 bits at a time, copying
+				//a byte from every plane at the same time.
+				mov dx, GFX_ADDRESS_REGISTER
+				mov al, GFX_MODE_REGISTER_INDEX
+				mov ah, 0x01
+				out dx, ax
+
+				//Sets the bit mask to 0xFF so that the entire image is copied.
+				//Needs to change this so images 
+				mov al, GFX_BIT_MASK_INDEX
+				mov ah, 0xFF
+				out dx, ax
+			}
+
+	for (j = 0; j < tile_size_y; j++)
+	{
+		for(i = 0; i < (tile_size_x>>3); i++)
+		{
+			//This gives a warning, because current_pixel is assigned but never used, but it's needed.
+
+			//Does a read operation, setting the internal EGA latches with the contents of every bitplane
+			current_pixel = *(origin + 4 + (i+(tile_x>>3)) + (j+tile_y)*(image_x>>3));
+
+			//Does a write operation, writing the internal EGA latches to memory.
+			*(get_drawbuffer()+((x>>3)+i) + (y+j)*(SCREEN_RES_X>>3)) = 0x0;
+		}
+	}
+
+	//Reset the mode register to default mode.
+	_asm 	{
+			mov dx, GFX_ADDRESS_REGISTER
+			mov al, GFX_MODE_REGISTER_INDEX
+			mov ah, 0x00
+			out dx, ax
+			}
+}
+
+void draw_char(int xc, int yc, char color, char c)
 {
 	unsigned char far *address;
-	unsigned char far *work_char;
+	unsigned char far *char_location;
 
 	char char_offset;
 	char char_line;
 
+	char current_char;
+
 	char bitmask;
 
-	int x, y;
+	char read_map;
 
-	address = get_drawbuffer() + (xc>>3) + yc*(SCREEN_RES_X>>3);
-	work_char = CHAR_SET_ROM + c*8;
+	int  y;
 
-	char_offset = xc&7;
+	int char_number;
 
-	bitmask = 0xFF >> char_offset;
+	char_number = c - 32;
+	char_location = CHAR_SET + (char_number%24);
 
-	//Needs to or it with 0x10 so that it sets up the data rotate register with the OR function.
-	if(transparency)
-		char_offset |= 0x10;
-	
+	read_map = char_number/24;
+
 	_asm 	{
+				//Sets the sequencer to 0x0F, so that every bit plane is being written to.
+				mov dx, SEQUENCER_ADDRESS_REGISTER
+				mov al, SEQUENCER_MAP_MASK_INDEX
+				mov ah, 0x0F
+				out dx, ax
+
+				//Sets the bit mask to 0xFF so that the entire image is copied.
+				//Needs to change this so images 
 				mov dx, GFX_ADDRESS_REGISTER
+				mov al, GFX_BIT_MASK_INDEX
+				mov ah, 0xFF
+				out dx, ax
+
+				mov dx, GFX_ADDRESS_REGISTER
+				mov al, GFX_MODE_REGISTER_INDEX
+				mov ah, 0x00
+				out dx, ax
+
 				mov al, GFX_SET_RESET_INDEX
 				mov ah, color
 				out dx, ax
+
 				mov al, GFX_ENABLE_SET_RESET_INDEX
 				mov ah, 0x0F
 				out dx, ax
-				mov al, GFX_DATA_ROTATE_INDEX
-				mov ah, char_offset
+
+				mov al, GFX_READ_MAP_SELECT_INDEX
+				mov ah, read_map
 				out dx, ax
 			}
 
-	for(x = 0; x < 2; x++)
+	address = get_drawbuffer() + (xc>>3) + yc*(SCREEN_RES_X>>3);
+
+	for(y = 0; y < 8; y++)
 	{
-		if(x == 1)
-		{
-			bitmask ^= 0xFF;
-		}
+		current_char = *(char_location+y*(192>>3));
+		current_char = current_char >> (xc&7);
 
 		_asm 	{
 				mov dx, GFX_ADDRESS_REGISTER
 				mov al, GFX_BIT_MASK_INDEX
-				mov ah, bitmask
+				mov ah, current_char
 				out dx, ax
 				}
 
-		for (y = 0; y < 8; y++)
+		*(address + y*(SCREEN_RES_X>>3)) &= 0x0;
+
+		if((xc & 7) > 0)
 		{
-			char_line = *(work_char + y);
-			getch();
-			*(address+x+y*(SCREEN_RES_X>>3)) &= 0;
-			
+			current_char = *(char_location+y*(192>>3));
+			current_char = current_char << (8-(xc&7));
+
+			_asm 	{
+				mov dx, GFX_ADDRESS_REGISTER
+				mov al, GFX_BIT_MASK_INDEX
+				mov ah, current_char
+				out dx, ax
+				}
+
+			*(address + 1 + y*(SCREEN_RES_X>>3)) &= 0x0;
 		}
+	}
+}
+
+void draw_string(int x, int y, char color, char * string)
+{
+	int i;
+
+	int len;
+
+	len = strlen(string);
+
+	for(i = 0; i < len; i ++)
+	{
+		draw_char(x + (i<<3), y, color, string[i]);
 	}
 }
 
 int main()
 {
 	set_ega_mode(EGA_GRAPHICS_MODE);
-//	load_pgm("handsome.pgm", IMAGE_STORAGE);
-//	transfer_mem_to_display(IMAGE_STORAGE, 0, 0);
-	
-	draw_char(4,1, '1', 12, 0);
+	DOUBLE_BUFFER_ENABLED = 0;
+
+	load_pgm("tileset.pgm", IMAGE_STORAGE);
+	transfer_tile_to_display(	IMAGE_STORAGE,
+							 	8, 8, 
+								16, 16, 
+								16, 16);
 
 	page_flip();
 
