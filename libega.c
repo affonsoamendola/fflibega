@@ -24,8 +24,6 @@
 
 #include "libega.h"
 
-int CURRENT_PAGE = 0;
-
 int PAGE_0_OFFSET = 0x0000;
 int PAGE_1_OFFSET = 0x0000;
 
@@ -38,6 +36,8 @@ unsigned char far * CHAR_SET = 0x00000000;
 
 int SCREEN_RES_X = 0;
 int SCREEN_RES_Y = 0;
+
+int CURRENT_MODE = 0x03;
 
 int ECD_DISPLAY_CONNECTED = 0;
 
@@ -59,10 +59,71 @@ int FILE_POSITION = 0;
 //made it my own way
 //Should be faster anyway :P
 
+#define CHAR_BUFFER_SIZE 32
+char CHAR_BUFFER[CHAR_BUFFER_SIZE];
+
+/* TODO, finish this, an interrupt handler to receive the vblank interrupt at IRQ 2 and use that to pageflip.
+void (interrupt far *old_vblank_ISR)();
+
+//TODO make a version that takes into account the different monochrome addresses.
+void interrupt far vblank_ISR()
+{
+	int teste = 0;
+	unsigned char data;
+
+	_asm  sti
+
+	outportb(CRTC_ADDRESS_REGISTER, CRTC_END_V_RETRACE_INDEX);
+	data = (unsigned char) inportb(CRTC_DATA_REGISTER);
+
+	data = data|0x10;
+
+	outportb(CRTC_DATA_REGISTER, data);
+
+	printf("%d\n", teste++);
+
+	outportb(PIC_ICR, 0x20);
+}
+
+void install_vblank_handler()
+{
+	unsigned char data;
+
+	old_vblank_ISR = _dos_getvect(VBLANK_INTERRUPT);
+
+	_dos_setvect(VBLANK_INTERRUPT, vblank_ISR);
+
+	outportb(CRTC_ADDRESS_REGISTER, CRTC_END_V_RETRACE_INDEX);
+	data = (unsigned char) inportb(CRTC_DATA_REGISTER);
+
+	data = data&(~0x20);
+
+	outportb(CRTC_DATA_REGISTER, data);
+
+	data = data&(~0x10);
+
+	outportb(CRTC_DATA_REGISTER, data);
+
+	data = (unsigned char) inportb(PIC_IMR);
+	data = data &(~0x40);
+	outportb(PIC_IMR, data);
+}
+
+void restore_vblank_handler()
+{
+	_dos_setvect(VBLANK_INTERRUPT, old_vblank_ISR);
+}
+*/
+
 void set_write_image_size(int value)
 {
 
 	WRITE_IMAGE_SIZE = value;
+}
+
+void set_double_buffer(int value)
+{
+	DOUBLE_BUFFER_ENABLED = value;
 }
 
 void set_ega_mode(int mode)
@@ -112,6 +173,8 @@ void set_ega_mode(int mode)
 	// my experiments, but I'll get to messing around with those modes eventually, if you know anything, hit
 	// me up,
 
+	int i;
+
 	if(mode >= 0x00 && mode <= 0x10)
 	{
 		_asm {
@@ -123,6 +186,12 @@ void set_ega_mode(int mode)
 
 	MONOCHROME_MODE = 0;
 	DOUBLE_BUFFER_ENABLED = 0;
+	CURRENT_MODE = mode;
+
+	for(i = 0; i<CHAR_BUFFER_SIZE; i++)
+	{
+		CHAR_BUFFER[i] = 0;
+	}
 
 	switch(mode)
 	{
@@ -243,13 +312,41 @@ void set_ega_mode(int mode)
 	}
 }
 
+unsigned char far * get_image_storage()
+{
+	return IMAGE_STORAGE;
+}
+
+int get_res_x()
+{
+	return SCREEN_RES_X;
+}
+
+int get_res_y()
+{
+	return SCREEN_RES_Y;
+}
+
+int get_current_mode()
+{
+	return CURRENT_MODE;
+}
+
+int get_framebuffer_page()
+{
+	return 0;
+}
+
+int get_drawbuffer_page()
+{
+	return 1;
+}
+
 unsigned char far * get_framebuffer()
 {
 	//Returns a pointer to the current framebuffer address
 	//
-	//If DOUBLE_BUFFER_ENABLED == 0, simply returns the address to PAGE_0, no matter what is the
-	//value of CURRENT_PAGE
-
+	/* OLDWAY, IGNORE THIS
 	if(CURRENT_PAGE == 1 && DOUBLE_BUFFER_ENABLED)
 	{
 		return (unsigned char far *)PAGE_1_ADDRESS;
@@ -257,16 +354,16 @@ unsigned char far * get_framebuffer()
 	else
 	{
 		return (unsigned char far *)PAGE_0_ADDRESS;
-	}
+	}*/
+
+	return (unsigned char far *)PAGE_0_ADDRESS;
 }
 
 unsigned char far * get_drawbuffer()
 {
 	//Returns a pointer to the current drawbuffer address
 	//
-	//If DOUBLE_BUFFER_ENABLED == 0, simply returns the address to PAGE_0, no matter what is the
-	//value of CURRENT_PAGE
-
+	/*OLDWAY IGNORE THIS
 	if(CURRENT_PAGE == 0 && DOUBLE_BUFFER_ENABLED)
 	{
 		return (unsigned char far *)PAGE_1_ADDRESS;
@@ -274,7 +371,9 @@ unsigned char far * get_drawbuffer()
 	else
 	{
 		return (unsigned char far *)PAGE_0_ADDRESS;
-	}
+	}*/
+
+	return (unsigned char far *)PAGE_1_ADDRESS;
 }
 
 void page_flip()
@@ -282,7 +381,7 @@ void page_flip()
 	//Toggles the start address of the CRTC between PAGE_0 and PAGE_1
 
 	//If DOUBLE_BUFFER_ENABLED == 0, does ABSOLUTELY JACK DIDDLY SQUAT (nothing)
-
+	/* OLDWAY, IGNORE THIS
 	int crtc_corrected_address_register;
 	int crtc_corrected_data_register;
 
@@ -336,7 +435,9 @@ void page_flip()
 					mov al, high_address
 					out dx, ax
 				}
-	}
+	}*/
+
+	transfer_mem_to_dest(get_drawbuffer(), get_framebuffer(), 0, (SCREEN_RES_X>>4)*SCREEN_RES_Y);
 }
 
 void set_pixel(int x, int y, unsigned char color)
@@ -361,6 +462,10 @@ void set_pixel(int x, int y, unsigned char color)
 	bit_mask = 0x80>>(x & 7);
 
 	_asm 	{
+				mov dx, SEQUENCER_ADDRESS_REGISTER
+				mov al, SEQUENCER_MAP_MASK_INDEX
+				mov ah, 0x0F
+				out dx, ax
 				mov dx, GFX_ADDRESS_REGISTER
 				mov al, GFX_SET_RESET_INDEX
 				mov ah, color
@@ -840,6 +945,13 @@ void load_font(char * file_location, unsigned char far * address)
 	CHAR_SET = address;
 }
 
+void load_pgm_directly(char * file_location, unsigned char far * address)
+{
+	set_write_image_size(0);
+	load_pgm(file_location, address);
+	set_write_image_size(1);
+}
+
 void load_pgm(char * file_location, unsigned char far * address)
 {
 	//Receives a DOS file location and loads it in the specified memory location
@@ -969,7 +1081,7 @@ void load_pgm(char * file_location, unsigned char far * address)
 	fclose(file);
 }
 
-void transfer_mem_to_display(unsigned char far * origin, int x, int y)
+void transfer_image_to_display(unsigned char far * origin, int x, int y)
 {	
 	//Receives a pointer to an image loaded in memory with load_pgm and a position on screen, and
 	//copies it (very quickly!), to that position on screen, taking into consideration the x and y
@@ -1028,6 +1140,50 @@ void transfer_mem_to_display(unsigned char far * origin, int x, int y)
 			mov ah, 0x00
 			out dx, ax
 			}
+}
+
+void transfer_mem_to_dest(unsigned far * origin, unsigned far * destination, int skip_bytes, int bytes)
+{
+	char current_pixel;
+
+	int i = 0;
+
+	current_pixel = 0;
+
+	_asm 	{
+				//Sets the sequencer to 0x0F, so that every bit plane is being written to.
+				mov dx, SEQUENCER_ADDRESS_REGISTER
+				mov al, SEQUENCER_MAP_MASK_INDEX
+				mov ah, 0x0F
+				out dx, ax
+				//Changes to mode 1, so that the transfer can happen 32 bits at a time, copying
+				//a byte from every plane at the same time.
+				mov dx, GFX_ADDRESS_REGISTER
+				mov al, GFX_MODE_REGISTER_INDEX
+				mov ah, 0x01
+				out dx, ax
+
+				//Sets the bit mask to 0xFF so that the entire image is copied.
+				//Needs to change this so images 
+				mov al, GFX_BIT_MASK_INDEX
+				mov ah, 0xFF
+				out dx, ax
+			}
+
+	for(i=0; i < bytes; i++)
+	{
+		current_pixel = *(origin + skip_bytes + i);
+
+		*(destination+i) = 0x0;
+	}
+
+	_asm 	{
+			mov dx, GFX_ADDRESS_REGISTER
+			mov al, GFX_MODE_REGISTER_INDEX
+			mov ah, 0x00
+			out dx, ax
+			}
+
 }
 
 void transfer_tile_to_display(	unsigned char far * origin,
@@ -1192,4 +1348,27 @@ void draw_string(int x, int y, char color, char * string)
 	{
 		draw_char(x + (i<<3), y, color, string[i]);
 	}
+}
+
+void draw_int(int x, int y, int color, int integer)
+{
+    draw_string(x, y, color, (char *)itoa(integer, CHAR_BUFFER, 10));
+}
+
+void draw_string_centralized(int y, int color, char *string)
+{
+	int len;
+
+	len = strlen(string);
+
+    draw_string(SCREEN_RES_X/2-len*4, y, color, string);
+}
+
+void main()
+{
+	set_ega_mode(EGA_GRAPHICS_MODE);
+	fill_screen(10);
+	set_pixel(10, 20, 12);
+	page_flip();
+	getch();
 }

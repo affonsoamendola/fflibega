@@ -3,21 +3,23 @@
 #	LibEGA											#
 #---------------------------------------------------#
 
-GAMENAME = libega
+LIBNAME = libega
 CC = tcc
 RM = rm -f
 
 INCLUDE = include;D:\tc\include
 LIB = D:\tc\lib
-CCFLAGS = -c
+CCFLAGS = 
 
-all: $(GAMENAME).exe
+all: $(LIBNAME).exe
 
-$(GAMENAME).exe:
-	$(CC) "-I$(INCLUDE) -L$(LIB) -e$(GAMENAME) $(CCFLAGS)" *.c 
-	
-run:
-	dosbox -conf ~/.dosbox/tcc.conf -c "$(GAMENAME)"
+$(LIBNAME).exe:
+# 	$(CC) "-I$(INCLUDE) -L$(LIB) -o$(LIBNAME).OBJ $(CCFLAGS)" *.c 
+	$(CC) "-I$(INCLUDE) -L$(LIB) -e$(LIBNAME) $(CCFLAGS)" *.c 
+#	tlib ".\$(LIBNAME).LIB + $(LIBNAME).OBJ"
 
 clean:
-	$(RM) *.OBJ *.EXE *.LOG *.BAT
+	$(RM) *.OBJ *.EXE *.LOG *.BAT *.LIB *.BAK
+
+run:
+	dosbox -conf ~/.dosbox/tcc.conf -c "$(LIBNAME)"
