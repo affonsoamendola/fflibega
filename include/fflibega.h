@@ -132,7 +132,7 @@ void transfer_tile_to_display(	unsigned char far * origin,
 								int tile_x, int tile_y, 
 								int tile_size_x, int tile_size_y);
 
-void transfer_mem_to_dest(	unsigned far * origin, unsigned far * destination, 
+void transfer_mem_to_dest(	unsigned char far * origin, unsigned char far * destination, 
 							int skip_bytes, int bytes);
 
 

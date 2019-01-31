@@ -1,7 +1,7 @@
 //Copyright Affonso Amendola 2019
 //Distributed under GPLv3, check the LICENSE file for some great licensing.
 //
-//libEGA
+//fflibEGA
 //---------------------------------------------
 //
 //So, I decided to write an EGA library, just for fun yknow, had nothing to do in my weekend,
@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "libega.h"
+#include "fflibega.h"
 
 int PAGE_0_OFFSET = 0x0000;
 int PAGE_1_OFFSET = 0x0000;
@@ -437,7 +437,7 @@ void page_flip()
 				}
 	}*/
 
-	transfer_mem_to_dest(get_drawbuffer(), get_framebuffer(), 0, (SCREEN_RES_X>>4)*SCREEN_RES_Y);
+	transfer_mem_to_dest(get_drawbuffer(), get_framebuffer(), 0, (SCREEN_RES_X>>3)*SCREEN_RES_Y);
 }
 
 void set_pixel(int x, int y, unsigned char color)
@@ -459,7 +459,7 @@ void set_pixel(int x, int y, unsigned char color)
 
 	unsigned char bit_mask = 0x00;
 
-	bit_mask = 0x80>>(x & 7);
+	bit_mask = 0x80>>(x&7);
 
 	_asm 	{
 				mov dx, SEQUENCER_ADDRESS_REGISTER
@@ -1142,7 +1142,7 @@ void transfer_image_to_display(unsigned char far * origin, int x, int y)
 			}
 }
 
-void transfer_mem_to_dest(unsigned far * origin, unsigned far * destination, int skip_bytes, int bytes)
+void transfer_mem_to_dest(unsigned char far * origin, unsigned char far * destination, int skip_bytes, int bytes)
 {
 	char current_pixel;
 
@@ -1362,13 +1362,4 @@ void draw_string_centralized(int y, int color, char *string)
 	len = strlen(string);
 
     draw_string(SCREEN_RES_X/2-len*4, y, color, string);
-}
-
-void main()
-{
-	set_ega_mode(EGA_GRAPHICS_MODE);
-	fill_screen(10);
-	set_pixel(10, 20, 12);
-	page_flip();
-	getch();
 }
