@@ -1,5 +1,6 @@
-# libEGA
+# Fofonso's VGA Library for DOS - fflibvga
 --------------------
+
 So, I decided to write a little C library for EGA graphics in DOS, since I want to use this graphics mode for my games.
 
 The main idea is to make this as efficient as possible, really making it possible for use in games.
